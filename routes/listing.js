@@ -19,66 +19,29 @@ const upload = multer({ storage });
 /* CREATE LISTING */
 router.post("/create", upload.array("listingPhotos"), async (req, res) => {
   try {
-    /* Take the information from the form */
-    const {
-      creator,
-      category,
-      type,
-      streetAddress,
-      aptSuite,
-      city,
-      province,
-      country,
-      guestCount,
-      bedroomCount,
-      bedCount,
-      bathroomCount,
-      amenities,
-      title,
-      description,
-      highlight,
-      highlightDesc,
-      price,
-    } = req.body;
+      // Take the information from the form
+      const { creator, category, type, streetAddress, aptSuite, city, province, country, guestCount, bedroomCount, bedCount, bathroomCount, amenities, title, description, highlight, highlightDesc, price } = req.body;
 
-    const listingPhotos = req.files
+      const listingPhotos = req.files;
+      if (!listingPhotos) {
+          return res.status(400).send("no file uploaded.")
+      }
 
-    if (!listingPhotos) {
-      return res.status(400).send("No file uploaded.")
-    }
+      const listingPhotoPaths = listingPhotos.map((file) => file.path);
 
-    const listingPhotoPaths = listingPhotos.map((file) => file.path)
+      const newListing = new Listing({
+          creator,
+          category, type, streetAddress, aptSuite, city, province, country, guestCount, bedroomCount, bedCount, bathroomCount, amenities, listingPhotoPaths, title, description, highlight, highlightDesc, price
+      });
 
-    const newListing = new Listing({
-      creator,
-      category,
-      type,
-      streetAddress,
-      aptSuite,
-      city,
-      province,
-      country,
-      guestCount,
-      bedroomCount,
-      bedCount,
-      bathroomCount,
-      amenities,
-      listingPhotoPaths,
-      title,
-      description,
-      highlight,
-      highlightDesc,
-      price,
-    })
+      await newListing.save();
 
-    await newListing.save()
-
-    res.status(200).json(newListing)
+      res.status(200).json(newListing);
   } catch (err) {
-    res.status(409).json({ message: "Fail to create Listing", error: err.message })
-    console.log(err)
+      res.status(409).json({ message: "Fail to create Listing", error: err.message });
+      console.log(err);
   }
-});
+})
 
 /* GET lISTINGS BY CATEGORY */
 router.get("/", async (req, res) => {
@@ -136,3 +99,4 @@ router.get("/:listingId", async (req, res) => {
 })
 
 module.exports = router
+
