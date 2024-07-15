@@ -122,7 +122,7 @@ router.post("/forgot-password", async (req, res) => {
       text: `You're receiving this e-mail because you or someone else has requested a password reset for your user account at DreamHomes.
 
             Click the link below to reset your password:
-            http://localhost:3000/resetPassword/${token}`
+            https://dreamhomes-3500.netlify.app/resetPassword/${token}`
     };
 
     transporter.sendMail(mailOptions, function (error, info) {
