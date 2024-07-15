@@ -2,48 +2,42 @@ const router = require("express").Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
+require("dotenv").config();
 
 const User = require("../models/User");
 
-/* Configuration Multer for File Upload */
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "public/uploads/"); // Store uploaded files in the 'uploads' folder
+    cb(null, "public/uploads/");
   },
   filename: function (req, file, cb) {
-    cb(null, file.originalname); // Use the original file name
+    cb(null, file.originalname);
   },
 });
 
 const upload = multer({ storage });
 
-/* USER REGISTER */
 router.post("/register", upload.single("profileImage"), async (req, res) => {
   try {
-    /* Take all information from the form */
     const { firstName, lastName, email, password } = req.body;
 
-    /* The uploaded file is available as req.file */
     const profileImage = req.file;
 
     if (!profileImage) {
       return res.status(400).send("No file uploaded");
     }
 
-    /* path to the uploaded profile photo */
     const profileImagePath = profileImage.path;
 
-    /* Check if user exists */
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ message: "User already exists!" });
     }
 
-    /* Hass the password */
     const salt = await bcrypt.genSalt();
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    /* Create a new User */
     const newUser = new User({
       firstName,
       lastName,
@@ -52,10 +46,8 @@ router.post("/register", upload.single("profileImage"), async (req, res) => {
       profileImagePath,
     });
 
-    /* Save the new User */
     await newUser.save();
 
-    /* Send a successful message */
     res
       .status(200)
       .json({ message: "User registered successfully!", user: newUser });
@@ -67,34 +59,119 @@ router.post("/register", upload.single("profileImage"), async (req, res) => {
   }
 });
 
-/* USER LOGIN*/
 router.post("/login", async (req, res) => {
   try {
-    /* Take the infomation from the form */
     const { email, password } = req.body
 
-    /* Check if user exists */
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(409).json({ message: "User doesn't exist!" });
     }
 
-    /* Compare the password with the hashed password */
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid Credentials!"})
+      return res.status(400).json({ message: "Invalid Credentials!" })
     }
 
-    /* Generate JWT token */
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET)
     delete user.password
 
-    res.status(200).json({ token, user })
+    const options = {
+      expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      httpOnly: true,
+    }
+
+    res.cookie("token", token, options).json({
+      status: true,
+      token, user, message: "Logged in successfully",
+    })
+
+    // res.status(200).json({ token, user });
 
   } catch (err) {
     console.log(err)
     res.status(500).json({ error: err.message })
   }
 })
+
+
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(409).json({ message: "User doesn't exist!" });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "5m" });
+
+    var transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      }
+    });
+
+    var mailOptions = {
+      from: `"DreamHomes" ${process.env.MAIL_USER}`,
+      to: `${email}`,
+      subject: '[DreamHomes] Password Reset Link',
+      text: `You're receiving this e-mail because you or someone else has requested a password reset for your user account at DreamHomes.
+
+            Click the link below to reset your password:
+            http://localhost:3000/resetPassword/${token}`
+    };
+
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        return res.status(409).json({ message: "Error sending email" });
+      } else {
+        return res.status(200).json({
+          message: "email sent successfully"
+        });
+      }
+    });
+  }
+  catch (err) {
+    console.log(err)
+    res.status(500).json({ error: err.message })
+  }
+});
+
+
+
+router.post("/reset-password/:token", async (req, res) => {
+  try {
+
+    const { token } = req.params;
+    const { password } = req.body;
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (!decoded) {
+      return res.status(401).json({
+        message: "token is not valid"
+      });
+    }
+
+    const id = decoded.id;
+
+    const hashPassword = await bcrypt.hash(password, 10);
+    const user = await User.findByIdAndUpdate({ _id: id }, { password: hashPassword });
+
+    return res.status(200).json({
+      user,
+      message: "Password updated successfullly"
+    })
+
+  }
+  catch (err) {
+    console.log(err)
+    res.status(500).json({ error: err.message })
+  }
+});
 
 module.exports = router
